@@ -1,0 +1,160 @@
+
+# 🧠 Airbnb Pricing & Booking Prediction — Backend (Seattle)
+
+FastAPI backend untuk:
+- Prediksi harga per malam (regresi)
+- Simulasi probabilitas booking 7-hari
+- Menyediakan API yang dipanggil oleh frontend
+
+> **Catatan:** Model & data hanya untuk **Seattle**. Sistem tidak serverless-friendly (disarankan RAM ≥ 1.5 GB).
+
+---
+
+## Daftar Isi
+1. [Ringkasan](#ringkasan)
+2. [Struktur Folder](#struktur-folder)
+3. [Instalasi & Menjalankan (Local)](#instalasi--menjalankan-local)
+4. [Training (Opsional)](#training-opsional)
+5. [API Endpoints](#api-endpoints)
+6. [Metrics & Artefak Model](#metrics--artefak-model)
+7. [Deployment Notes](#deployment-notes)
+8. [Limitations](#limitations)
+9. [Lisensi](#lisensi)
+
+---
+
+## Ringkasan
+- **Price model:** `HistGradientBoostingRegressor` (target: `log(price)`)
+- **Bayesian Network:** `PriceBucket_static` → `Low` / `Typical` / `High` (interpretability)
+- **Booking model:** Probabilitas booking selama 7 hari (menggunakan anchor dari dataset; custom listing → nearest peer)
+
+---
+
+## Struktur Folder
+
+
+backend/
+├── api/
+│   └── index.py               # Production entry (optional)
+├── src/
+│   ├── app.py                 # FastAPI app (entry untuk dev)
+│   ├── schemas.py             # Pydantic schemas
+│   ├── pricing/               # Logic rekomendasi harga & preprocessing
+│   ├── booking/               # Logic prediksi booking
+│   ├── modeling/              # Scripts training & utilities
+│   ├── etl/                   # Feature building
+│   └── utils/
+├── models/
+│   ├── bn/bn_model.pkl
+│   ├── regression/price_reg.pkl
+│   ├── regression/feature_columns.json
+│   └── booking/booking_clf.pkl
+├── data/
+│   └── processed/features_listings_with_peer.parquet
+├── requirements.txt
+└── README.md
+
+## Instalasi & Menjalankan (Local)
+1. Buat virtual environment
+python -m venv .venv
+
+macOS / Linux
+source .venv/bin/activate
+
+Windows (PowerShell)
+.venv\Scripts\Activate.ps1
+
+2. Install dependencies
+pip install -r requirements.txt
+
+3. Run dev server
+uvicorn src.app:app --reload --port 8000
+## Swagger UI: http://localhost:8000/
+
+## Training (Opsional)
+Jika ingin melatih ulang model dari data mentah:
+ * Build features
+   python -m src.etl.build_listing_features
+
+ * Train price regression
+   python -m src.modeling.regression_train_price
+
+ * Train booking model
+   python -m src.modeling.booking_train_model
+
+
+## API Endpoints
+Berikut ringkasan endpoint utama.
+
+### Health Check
+GET /health
+{"status": "ok"}
+
+### Rekomendasi Harga — Dataset Listing
+POST /recommend_by_index
+{
+  "row_index": 0,
+  "weekend_flag": true,
+  "holiday_flag": false
+}
+
+### Rekomendasi Harga — Custom Listing
+POST /recommend_from_features
+{
+  "room_type": "Entire home/apt",
+  "accommodates": 2,
+  "bathrooms": 1,
+  "amenities": "Wifi,Kitchen",
+  "minimum_nights": 1,
+  "instant_bookable": true,
+  "latitude": 47.61,
+  "longitude": -122.33,
+  "weekend_flag": false,
+  "holiday_flag": false
+}
+
+### Booking 7-Hari — Dataset Listing
+POST /booking_week_by_index
+{
+  "row_index": 0,
+  "start_date": "2025-01-10",
+  "base_price": 120
+}
+
+Response Umum:
+ * recommended_price
+ * price_bucket
+ * price_explanations (feature importance / BN explanation)
+ * booking_probabilities (per hari & agregat 7-hari)
+
+## Metrics & Artefak Model
+
+### Price Regression Metrics:
+ * MAE ≈ $32.7
+ * R² ≈ 0.63
+ * SMAPE ≈ 23.7%
+
+### Artefak Penting:
+ * models/bn/bn_model.pkl
+ * models/regression/price_reg.pkl
+ * models/regression/feature_columns.json
+ * models/booking/booking_clf.pkl
+Deployment Notes
+ * ❌ Vercel (Serverless): Tidak cocok karena model berat / RAM > limit function standar.
+ * ✅ Rekomendasi: Railway, Fly.io, Render, atau VM (DigitalOcean / AWS EC2).
+ * CORS: Pastikan dikonfigurasi agar frontend dapat akses API.
+ * Worker: Gunakan worker / process manager (Gunicorn/Uvicorn) untuk handling model loading (keep model in memory).
+Limitations
+ * Hanya dilatih pada dataset Seattle.
+ * Booking model tidak aware event real-time (konser, konferensi, dll).
+ * Prediksi booking untuk custom listing adalah aproksimasi via nearest dataset peer.
+Lisensi
+Academic / Educational Use
+
+<br>
+
+---
+
+<br>
+
+
